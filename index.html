@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dead Era — prototype</title>
+<style>
+  :root{
+    --bg:#101218; --panel:#181b24; --ink:#d8dbe4; --dim-ink:#8a8fa3;
+    --living:#3f8f5a; --living-soft:#22402e; --dead:#7b5bb5; --dead-soft:#332450;
+    --gold:#d8a93d; --red:#d05252; --card:#20242f; --cardline:#333949;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--ink); font-family:"Segoe UI",system-ui,sans-serif; font-size:14px; height:100vh; overflow:hidden;}
+  #app{display:grid; grid-template-columns:1fr 250px; grid-template-rows:44px 1fr auto; height:100vh; gap:8px; padding:8px;}
+  header{grid-column:1/3; display:flex; align-items:center; gap:16px; background:var(--panel); border-radius:8px; padding:0 14px;}
+  header h1{font-size:17px; letter-spacing:2px; color:var(--gold); font-weight:600;}
+  header .info{color:var(--dim-ink); font-size:13px;}
+  header button{margin-left:auto;}
+  button{background:#2a3040; color:var(--ink); border:1px solid #3c4458; border-radius:6px; padding:6px 14px; cursor:pointer; font-size:13px;}
+  button:hover:not(:disabled){background:#353d52;}
+  button:disabled{opacity:.4; cursor:default;}
+  button.armed{background:var(--red); border-color:#e07a7a;}
+  button.endturn{background:#2e4d3a; border-color:var(--living);}
+
+  #boards{grid-column:1; display:grid; grid-template-columns:1fr 1fr; gap:8px; min-height:0;}
+  .dim{background:var(--panel); border-radius:10px; display:flex; flex-direction:column; padding:8px; gap:6px; min-height:0; border-top:3px solid;}
+  .dim.living{border-top-color:var(--living);}
+  .dim.dead{border-top-color:var(--dead);}
+  .dim h2{font-size:12px; text-transform:uppercase; letter-spacing:2px; text-align:center; color:var(--dim-ink);}
+  .dim.living h2{color:#6fbf8a;} .dim.dead h2{color:#a98fd6;}
+
+  .heroChip{display:flex; align-items:center; gap:10px; justify-content:center; padding:5px 10px; border-radius:8px; background:#12141c; border:1px solid #2a2f3d;}
+  .heroChip .hp{font-size:18px; font-weight:700;}
+  .living .heroChip .hp{color:#7fd49b;} .dead .heroChip .hp{color:#bfa1ec;}
+  .heroChip .name{color:var(--dim-ink); font-size:12px;}
+  .heroChip.targetable{border-color:var(--red); box-shadow:0 0 8px rgba(224,90,90,.6); cursor:pointer;}
+
+  .row{flex:1; display:flex; gap:6px; align-items:center; justify-content:center; min-height:126px; border-radius:8px; padding:4px;}
+  .living .row{background:var(--living-soft);} .dead .row{background:var(--dead-soft);}
+  .rowlabel{font-size:10px; color:var(--dim-ink); text-align:center; text-transform:uppercase; letter-spacing:1px;}
+
+  .unit{width:92px; height:118px; background:var(--card); border:1px solid var(--cardline); border-radius:8px; padding:4px; display:flex; flex-direction:column; position:relative; user-select:none;}
+  .unit .uname{font-size:9.5px; line-height:1.15; height:22px; overflow:hidden;}
+  .unit .uart{height:30px; margin:1px 0;}
+  .unit .uart svg{width:100%; height:100%; display:block;}
+  .unit .ability{font-size:8.5px; color:var(--gold); overflow:hidden; flex:1;}
+  .unit .stats{display:flex; justify-content:space-between; font-size:16px; font-weight:700;}
+  .unit .stats .atk{color:#e8c15a;} .unit .stats .hp{color:#e07a7a;}
+  .unit.exhausted{opacity:.5;}
+  .unit.ready{border-color:#5a9c6f; cursor:pointer;}
+  .dead .unit.ready{border-color:#9c7fd0;}
+  .unit.selected{border-color:var(--gold); box-shadow:0 0 10px rgba(216,169,61,.7);}
+  .unit.targetable{border-color:var(--red); box-shadow:0 0 8px rgba(224,90,90,.6); cursor:pointer;}
+  .unit.hurt .hp{color:#ff5050;}
+
+  #bottom{grid-column:1/3; display:flex; gap:8px; align-items:stretch;}
+  .handbox{flex:1; background:var(--panel); border-radius:10px; padding:6px 8px; min-height:200px;}
+  .handbox h3{font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--dim-ink); margin-bottom:4px;}
+  .handbox.deadhand h3{color:#a98fd6;}
+  .hand{display:flex; gap:6px; flex-wrap:wrap;}
+
+  .card{width:118px; height:160px; background:var(--card); border:1px solid var(--cardline); border-radius:8px; padding:5px; display:flex; flex-direction:column; position:relative; user-select:none;}
+  .card .cart{height:36px; margin:1px 0;}
+  .card .cart svg{width:100%; height:100%; display:block;}
+  .card .cost{position:absolute; top:-6px; left:-6px; width:22px; height:22px; border-radius:50%; background:#2d5f8a; border:1px solid #5a9cd0; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px;}
+  .card .cname{font-size:11px; font-weight:600; margin:2px 0 2px 12px; line-height:1.1;}
+  .card .ctext{font-size:9px; color:var(--dim-ink); flex:1; overflow:hidden; line-height:1.25;}
+  .card .cstats{font-size:10px; display:flex; justify-content:space-between;}
+  .card .cstats .liv{color:#7fd49b;} .card .cstats .ded{color:#bfa1ec;}
+  .card .spelltag{font-size:10px; color:var(--gold); text-align:center; margin-top:auto;}
+  .card.playable{border-color:#5a9c6f; cursor:pointer;}
+  .card.playable:hover{transform:translateY(-3px);}
+  .card.sacmode{border-color:var(--red); box-shadow:0 0 8px rgba(224,90,90,.5); cursor:pointer;}
+  .card.unplayable{opacity:.55;}
+  .card.pendingcast{border-color:var(--gold); box-shadow:0 0 10px rgba(216,169,61,.7);}
+
+  #controls{width:190px; background:var(--panel); border-radius:10px; padding:10px; display:flex; flex-direction:column; gap:8px;}
+  #controls .stat{display:flex; justify-content:space-between; font-size:13px;}
+  #controls .stat b{color:var(--gold);}
+  .essence{color:#6ab7e8; font-weight:700;}
+
+  #logbox{grid-column:2; grid-row:2; background:var(--panel); border-radius:10px; padding:8px; overflow-y:auto; font-size:11.5px; line-height:1.5; color:var(--dim-ink);}
+  #logbox .l-p{color:#9fd4ae;} #logbox .l-a{color:#e0a0a0;} #logbox .l-s{color:#c5aef0;}
+  #logbox div{border-bottom:1px solid #22273266; padding:2px 0;}
+
+  #overlay{position:fixed; inset:0; background:rgba(8,9,13,.82); display:none; align-items:center; justify-content:center; flex-direction:column; gap:18px; z-index:50;}
+  #overlay.show{display:flex;}
+  #overlay .big{font-size:34px; font-weight:700; letter-spacing:2px;}
+  #overlay .why{color:var(--dim-ink); font-size:16px;}
+  #hint{position:fixed; bottom:225px; left:50%; transform:translateX(-50%); background:#000c; padding:6px 16px; border-radius:20px; font-size:12px; color:var(--gold); pointer-events:none; display:none; z-index:40;}
+  #hint.show{display:block;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>DEAD ERA</h1>
+    <span class="info" id="turnInfo"></span>
+    <span class="info" id="aiInfo"></span>
+    <button onclick="newGame()">New Game</button>
+  </header>
+
+  <div id="boards">
+    <section class="dim living">
+      <h2>Living Dimension</h2>
+      <div class="heroChip" id="aiLifeChip"></div>
+      <div class="rowlabel">enemy</div>
+      <div class="row" id="aiLiving"></div>
+      <div class="row" id="pLiving"></div>
+      <div class="rowlabel">you</div>
+    </section>
+    <section class="dim dead">
+      <h2>Dead Dimension</h2>
+      <div class="heroChip" id="aiSoulChip"></div>
+      <div class="rowlabel">enemy</div>
+      <div class="row" id="aiDead"></div>
+      <div class="row" id="pDead"></div>
+      <div class="rowlabel">you</div>
+    </section>
+  </div>
+
+  <div id="logbox"></div>
+
+  <div id="bottom">
+    <div class="handbox"><h3>Hand (living)</h3><div class="hand" id="pHand"></div></div>
+    <div class="handbox deadhand"><h3>Dead Hand — sacrificed cards · free to play (unlimited energy below)</h3><div class="hand" id="pDeadHand"></div></div>
+    <div id="controls">
+      <div class="stat"><span>Essence</span><b class="essence" id="essDisp"></b></div>
+      <div class="stat"><span>Your Life</span><b id="pLifeDisp"></b></div>
+      <div class="stat"><span>Your Soul</span><b id="pSoulDisp"></b></div>
+      <div class="stat"><span>Deck</span><b id="pDeckDisp"></b></div>
+      <button id="sacBtn" onclick="skipSacrifice()">Skip sacrifice</button>
+      <button class="endturn" id="endBtn" onclick="playerEndTurn()">End Turn</button>
+    </div>
+  </div>
+</div>
+
+<div id="hint"></div>
+<div id="overlay"><div class="big" id="ovTitle"></div><div class="why" id="ovWhy"></div><button onclick="newGame()">Play Again</button></div>
+
+<script>
+"use strict";
+
+/* ============ CARD DEFINITIONS ============ */
+const DEFS = {
+  peasant:    {name:"Peasant Levy",     deadName:"Restless Levy",   cost:1, type:"unit", l:[2,1], d:[1,1], text:""},
+  gravrat:    {name:"Grave Rat",        deadName:"Bone Rat",        cost:1, type:"unit", l:[1,1], d:[2,2], text:"Better off dead."},
+  hound:      {name:"Charging Hound",   deadName:"Barrow Hound",    cost:2, type:"unit", l:[2,1], d:[1,1], ability:"haste", text:"Haste: attacks immediately, in either dimension."},
+  shambler:   {name:"Bone Shambler",    deadName:"Risen Shambler",  cost:2, type:"unit", l:[1,2], d:[3,3], text:"Yearns for the other side."},
+  priest:     {name:"Village Priest",   deadName:"Heretic Shade",   cost:2, type:"unit", l:[1,3], d:[1,1], ability:"heal2", text:"On play: restore 2 Life — or 2 Soul if played dead."},
+  collector:  {name:"Corpse Collector", deadName:"Grave Servant",   cost:2, type:"unit", l:[2,2], d:[2,2], ability:"martyr", text:"Martyr: draw a card when you sacrifice this."},
+  flameblade: {name:"Flameblade Knight",deadName:"Ashen Knight",    cost:3, type:"unit", l:[3,3], d:[1,1], ability:"undying", text:"Undying: when this dies, it returns to that dimension's hand instead of passing on."},
+  plague:     {name:"Plague Bearer",    deadName:"Hollow Bearer",   cost:3, type:"unit", l:[2,3], d:[2,2], ability:"plague", text:"On death: deal 1 damage to all enemy units in its dimension."},
+  warden:     {name:"Soul Warden",      deadName:"Warden of Souls", cost:3, type:"unit", l:[3,4], d:[2,3], text:""},
+  wraithcaller:{name:"Wraith Caller",   deadName:"Wraith Lord",     cost:4, type:"unit", l:[2,4], d:[3,3], ability:"spirit", text:"On play: put a 2/2 Spirit into the OTHER dimension's field."},
+  ghoul:      {name:"Ember Ghoul",      deadName:"Cinder Wretch",   cost:4, type:"unit", l:[4,3], d:[4,2], text:""},
+  deathknight:{name:"Death Knight",     deadName:"Dread Revenant",  cost:5, type:"unit", l:[4,5], d:[5,5], text:"Terrible in any world."},
+  spirit:     {name:"Spirit",           deadName:"Spirit",          cost:0, type:"unit", l:[2,2], d:[2,2], token:true, text:"Token."},
+  cull:       {name:"Cull the Weak",    cost:1, type:"spell", target:"friendlyLiving", text:"Destroy a friendly living unit (it crosses over). Draw a card.",
+               deadFace:{name:"Enlighten", target:"friendlyDeadAny", text:"Release a friendly dead unit — it passes on forever. Draw a card."}},
+  smite:      {name:"Smite",            cost:2, type:"spell", target:"anyLiving",      text:"Deal 3 damage to any living unit.",
+               deadFace:{name:"Soul Rend", target:"anyDead", text:"Deal 3 damage to any dead unit."}},
+  resurrection:{name:"Resurrection",    cost:3, type:"spell", target:"friendlyDead",   text:"Return a friendly dead unit to your living field. Works from either hand."},
+};
+
+const DECKLIST = [];
+["peasant","gravrat","hound","shambler","priest","collector","flameblade","plague","warden","wraithcaller","ghoul","deathknight"]
+  .forEach(id => DECKLIST.push(id,id));
+DECKLIST.push("cull","cull","smite","smite","smite","resurrection");
+
+const MAX_FIELD = 6, MAX_HAND = 10, START_LIFE = 25, START_SOUL = 15;
+
+/* ============ CARD ART (living face / dead creepy face) ============ */
+const SV = inner => `<svg viewBox="0 0 100 56" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+const ART = {
+  peasant:{
+    l: SV(`<path d="M14 50h72" stroke="#4a7a4f" stroke-width="4"/><path d="M24 50q7-15 17 0" fill="#c9a54a"/><line x1="62" y1="10" x2="52" y2="48" stroke="#8a6b3f" stroke-width="4"/><path d="M55 21l16 5M61 9l-3 15M69 11l-4 14M76 14l-4 13" stroke="#b8bcc8" stroke-width="3"/>`),
+    d: SV(`<path d="M14 50h72" stroke="#3a3f4e" stroke-width="4"/><path d="M40 50V34M33 41l7-5M47 39l-5-4M40 34q0-7 5-9" stroke="#cfd3dc" stroke-width="3" fill="none"/><line x1="64" y1="26" x2="58" y2="48" stroke="#5a4a33" stroke-width="3"/><circle cx="72" cy="18" r="2.2" fill="#9fd0f0"/><circle cx="26" cy="24" r="1.6" fill="#9fd0f0"/>`)},
+  gravrat:{
+    l: SV(`<ellipse cx="46" cy="38" rx="20" ry="11" fill="#6a6f7d"/><circle cx="66" cy="33" r="7" fill="#6a6f7d"/><circle cx="64" cy="25" r="3" fill="#6a6f7d"/><path d="M27 41Q10 46 8 32" stroke="#6a6f7d" stroke-width="3" fill="none"/><circle cx="69" cy="32" r="1.6" fill="#e07a7a"/>`),
+    d: SV(`<path d="M26 40Q46 22 66 34" stroke="#cfd3dc" stroke-width="4" fill="none"/><path d="M34 36v8M42 32v9M50 30v9M58 31v8" stroke="#cfd3dc" stroke-width="2.5"/><circle cx="70" cy="33" r="6" fill="#cfd3dc"/><circle cx="72" cy="32" r="1.8" fill="#ff5050"/><path d="M26 40Q12 46 8 34" stroke="#cfd3dc" stroke-width="2" fill="none"/>`)},
+  hound:{
+    l: SV(`<path d="M22 42Q34 28 56 33L70 24 76 30 64 40Q44 47 26 45Z" fill="#9a7648"/><path d="M30 45l-5 9M58 41l5 9" stroke="#9a7648" stroke-width="4"/><circle cx="72" cy="28" r="1.6" fill="#12141c"/>`),
+    d: SV(`<path d="M22 42Q34 28 56 33L70 24 76 30 64 40Q44 47 26 45Z" fill="#5d7fa0" opacity=".72"/><path d="M30 45l-5 9M58 41l5 9" stroke="#5d7fa0" stroke-width="4" opacity=".72"/><circle cx="72" cy="28" r="2.2" fill="#9fd0f0"/><path d="M20 32q-8-4-7-12M28 28q-5-4-4-9" stroke="#9fd0f0" stroke-width="2" fill="none" opacity=".55"/>`)},
+  shambler:{
+    l: SV(`<path d="M14 48h72" stroke="#4a7a4f" stroke-width="4"/><circle cx="42" cy="36" r="9" fill="#d8d4c8"/><circle cx="39" cy="35" r="2.2" fill="#20242f"/><circle cx="46" cy="35" r="2.2" fill="#20242f"/><path d="M62 48V36q0-6 6-6" stroke="#d8d4c8" stroke-width="3.5" fill="none"/>`),
+    d: SV(`<circle cx="50" cy="15" r="8" fill="#d8d4c8"/><circle cx="47" cy="14" r="2" fill="#ff5050"/><circle cx="53" cy="14" r="2" fill="#ff5050"/><path d="M50 23v17M38 30h24M50 40l-9 12M50 40l9 12M42 27v7M58 27v7" stroke="#d8d4c8" stroke-width="3" fill="none"/>`)},
+  priest:{
+    l: SV(`<path d="M42 50L50 24l8 26Z" fill="#e8e4d8"/><circle cx="50" cy="17" r="6" fill="#e8cfa8"/><ellipse cx="50" cy="7" rx="8" ry="2.5" fill="none" stroke="#e8c15a" stroke-width="2"/><line x1="66" y1="12" x2="66" y2="50" stroke="#8a6b3f" stroke-width="3"/><circle cx="66" cy="9" r="3" fill="#e8c15a"/>`),
+    d: SV(`<path d="M40 52Q38 24 50 15q12 9 10 37Z" fill="#3a3448"/><circle cx="50" cy="20" r="6" fill="#171223"/><circle cx="48" cy="19" r="1.5" fill="#9fd0f0"/><circle cx="53" cy="19" r="1.5" fill="#9fd0f0"/><path d="M66 12v38" stroke="#4a4054" stroke-width="3"/><path d="M66 12q7 4 0 9" stroke="#7b5bb5" stroke-width="2.5" fill="none"/>`)},
+  collector:{
+    l: SV(`<line x1="28" y1="10" x2="40" y2="42" stroke="#8a6b3f" stroke-width="3"/><path d="M38 40q9 12-2 15-11 2-6-13Z" fill="#9aa0b0"/><path d="M58 30q17 0 15 16-2 8-13 8-12 0-12-11 0-11 10-13Z" fill="#8a6b3f"/><path d="M61 30l6-7" stroke="#5a4426" stroke-width="3"/>`),
+    d: SV(`<path d="M42 26q21-4 23 14 2 12-13 12-16 0-16-12 0-10 6-14Z" fill="#4a4433"/><circle cx="50" cy="38" r="2.2" fill="#ff8c3c"/><circle cx="58" cy="38" r="2.2" fill="#ff8c3c"/><path d="M30 48l9-3M28 42l10 1M33 52l7-5" stroke="#cfd3dc" stroke-width="2.5"/>`)},
+  flameblade:{
+    l: SV(`<line x1="50" y1="6" x2="50" y2="40" stroke="#c8ccd8" stroke-width="4"/><line x1="41" y1="38" x2="59" y2="38" stroke="#8a6b3f" stroke-width="3"/><line x1="50" y1="38" x2="50" y2="49" stroke="#8a6b3f" stroke-width="3"/><path d="M50 4q7 8 2 15 9-2 6 9 7 0 4 9" stroke="#e8823c" stroke-width="2.5" fill="none"/><path d="M50 9q-7 8-2 13-9 0-5 9" stroke="#e8b13c" stroke-width="2.5" fill="none"/>`),
+    d: SV(`<line x1="50" y1="8" x2="50" y2="40" stroke="#6a7284" stroke-width="4"/><line x1="41" y1="38" x2="59" y2="38" stroke="#5a4a33" stroke-width="3"/><line x1="50" y1="38" x2="50" y2="49" stroke="#5a4a33" stroke-width="3"/><path d="M50 8q7-7 4-2M45 16q-8-3-4 2M55 22q8-2 4 2" stroke="#8a8fa3" stroke-width="2" fill="none" opacity=".7"/><circle cx="50" cy="7" r="2.2" fill="#ff8c3c"/>`)},
+  plague:{
+    l: SV(`<circle cx="48" cy="27" r="13" fill="#7da05a"/><rect x="42" y="36" width="12" height="7" rx="2" fill="#7da05a"/><circle cx="44" cy="25" r="3" fill="#1c2416"/><circle cx="53" cy="25" r="3" fill="#1c2416"/><circle cx="75" cy="15" r="2" fill="#3a4430"/><path d="M71 11q4 2 8 0" stroke="#3a4430" stroke-width="1.5" fill="none"/><circle cx="23" cy="41" r="2" fill="#3a4430"/>`),
+    d: SV(`<path d="M50 10v36M40 18q10 9 20 0M38 27q12 10 24 0M40 36q10 9 20 0" stroke="#cfd3dc" stroke-width="3" fill="none"/><path d="M28 15q7-9 11 0M61 13q7-7 9 3" stroke="#7da05a" stroke-width="2" fill="none" opacity=".7"/>`)},
+  warden:{
+    l: SV(`<rect x="42" y="18" width="16" height="22" rx="3" fill="none" stroke="#8a8fa3" stroke-width="3"/><circle cx="50" cy="29" r="5.5" fill="#6ab7e8"/><path d="M46 18q4-9 8 0" stroke="#8a8fa3" stroke-width="3" fill="none"/><line x1="41" y1="44" x2="59" y2="44" stroke="#8a8fa3" stroke-width="3"/>`),
+    d: SV(`<rect x="42" y="18" width="16" height="22" rx="3" fill="none" stroke="#8a8fa3" stroke-width="3"/><circle cx="50" cy="29" r="6" fill="#7b5bb5"/><circle cx="48" cy="28" r="1.3" fill="#e8e4f4"/><circle cx="53" cy="28" r="1.3" fill="#e8e4f4"/><path d="M46 18q4-9 8 0" stroke="#8a8fa3" stroke-width="3" fill="none"/><path d="M62 26q9-2 11-9M38 26q-9-2-11-9" stroke="#9fd0f0" stroke-width="2" fill="none" opacity=".6"/>`)},
+  wraithcaller:{
+    l: SV(`<path d="M38 52Q36 24 50 16q14 8 12 36Z" fill="#5a4386"/><circle cx="50" cy="21" r="6" fill="#171223"/><path d="M40 34Q28 26 26 14M60 34q12-8 14-20" stroke="#5a4386" stroke-width="4" fill="none"/><circle cx="26" cy="10" r="3" fill="#9fd0f0" opacity=".85"/><circle cx="74" cy="10" r="3" fill="#9fd0f0" opacity=".85"/>`),
+    d: SV(`<path d="M36 52q-2-30 14-38 16 8 14 38l-5-6-5 6-4-6-4 6-5-6Z" fill="#4a3670"/><path d="M42 11l4 6 4-6 4 6 4-6" stroke="#d8a93d" stroke-width="2.5" fill="none"/><circle cx="46" cy="23" r="2.2" fill="#9fd0f0"/><circle cx="54" cy="23" r="2.2" fill="#9fd0f0"/>`)},
+  ghoul:{
+    l: SV(`<path d="M32 52Q30 30 46 22q16-6 22 8 4 10-2 22Z" fill="#55606e"/><circle cx="56" cy="29" r="2.2" fill="#ff8c3c"/><circle cx="63" cy="30" r="2.2" fill="#ff8c3c"/><path d="M36 44l-7 7M40 47l-5 8" stroke="#55606e" stroke-width="3"/>`),
+    d: SV(`<path d="M32 52Q30 30 46 22q16-6 22 8 4 10-2 22Z" fill="#2e2a33"/><path d="M40 34l9 7M46 28l6 9M55 41l7 5" stroke="#ff8c3c" stroke-width="2"/><circle cx="56" cy="28" r="2.2" fill="#ffb03c"/><circle cx="63" cy="30" r="2.2" fill="#ffb03c"/>`)},
+  deathknight:{
+    l: SV(`<path d="M38 46V26q0-12 12-12t12 12v20Z" fill="#3a4152"/><rect x="42" y="30" width="16" height="4" fill="#12141c"/><circle cx="46" cy="32" r="1.8" fill="#ff5050"/><circle cx="54" cy="32" r="1.8" fill="#ff5050"/><path d="M38 26Q26 22 24 10M62 26q12-4 14-16" stroke="#6a7284" stroke-width="4" fill="none"/>`),
+    d: SV(`<path d="M38 46V26q0-12 12-12t12 12v20Z" fill="#232838"/><rect x="42" y="30" width="16" height="4" fill="#0c0e14"/><circle cx="46" cy="32" r="2.2" fill="#9fd0f0"/><circle cx="54" cy="32" r="2.2" fill="#9fd0f0"/><path d="M38 26Q26 22 24 10M62 26q12-4 14-16" stroke="#4a5268" stroke-width="4" fill="none"/><path d="M44 14q2-7 6-9 4 2 6 9M50 21l4 9" stroke="#7b5bb5" stroke-width="2" fill="none"/>`)},
+  spirit:{
+    l: SV(`<circle cx="55" cy="22" r="10" fill="#9fd0f0" opacity=".9"/><path d="M47 30Q34 40 24 38q10 6 21 2" fill="#9fd0f0" opacity=".55"/><circle cx="52" cy="20" r="2" fill="#1c2833"/><circle cx="59" cy="20" r="2" fill="#1c2833"/>`),
+    d: SV(`<circle cx="55" cy="22" r="10" fill="#9fd0f0" opacity=".9"/><path d="M47 30Q34 40 24 38q10 6 21 2" fill="#9fd0f0" opacity=".55"/><circle cx="52" cy="20" r="2" fill="#1c2833"/><circle cx="59" cy="20" r="2" fill="#1c2833"/>`)},
+  cull:{
+    l: SV(`<path d="M50 8l4 26-4 12-4-12Z" fill="#c8ccd8"/><line x1="41" y1="12" x2="59" y2="12" stroke="#8a6b3f" stroke-width="3"/><path d="M50 49q4 4 0 7-4-3 0-7" fill="#d05252"/>`),
+    d: SV(`<circle cx="50" cy="15" r="7" fill="#e8e4d8"/><path d="M50 23q-2 12-7 21M50 23q2 12 7 21" stroke="#e8e4d8" stroke-width="3" fill="none" opacity=".8"/><path d="M50 5V1M33 10l-6-5M67 10l6-5M27 24h-9M73 24h9" stroke="#e8c15a" stroke-width="2.5"/>`)},
+  smite:{
+    l: SV(`<path d="M56 4L38 30h12L42 52l22-28H52Z" fill="#e8c15a"/>`),
+    d: SV(`<path d="M30 8Q38 30 32 50M48 6q8 22 2 46M66 8q8 22 2 42" stroke="#a071d8" stroke-width="4" fill="none" stroke-linecap="round"/>`)},
+  resurrection:{
+    l: SV(`<rect x="34" y="44" width="32" height="6" rx="2" fill="#4a4f5e"/><circle cx="50" cy="20" r="6" fill="#e8e4d8"/><path d="M50 26v18M50 31l-10 7M50 31l10 7" stroke="#e8e4d8" stroke-width="4" stroke-linecap="round"/><path d="M50 9V2M34 13l-6-6M66 13l6-6" stroke="#e8c15a" stroke-width="2.5"/>`),
+    d: SV(`<rect x="34" y="44" width="32" height="6" rx="2" fill="#4a4f5e"/><circle cx="50" cy="20" r="6" fill="#e8e4d8"/><path d="M50 26v18M50 31l-10 7M50 31l10 7" stroke="#e8e4d8" stroke-width="4" stroke-linecap="round"/><path d="M50 9V2M34 13l-6-6M66 13l6-6" stroke="#e8c15a" stroke-width="2.5"/>`)},
+};
+function artFor(cardId, dead){
+  const a = ART[cardId];
+  return a ? (dead && a.d ? a.d : a.l) : "";
+}
+
+/* ============ STATE ============ */
+let state = null, uidSeq = 0;
+
+function newSide(){
+  const deck = [...DECKLIST];
+  for(let i = deck.length-1; i > 0; i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [deck[i],deck[j]] = [deck[j],deck[i]];
+  }
+  return {life:START_LIFE, soul:START_SOUL, soulBroken:false, essence:0, maxEss:0, deck,
+          hand:[], deadHand:[], living:[], dead:[], sacrificed:false};
+}
+
+function newGame(){
+  state = {player:newSide(), ai:newSide(), turn:"player", round:1, winner:null, mode:null, log:[]};
+  draw("player",5); draw("ai",5);
+  log("A new age begins. You go first (no draw on turn 1).","s");
+  document.getElementById("overlay").classList.remove("show");
+  beginPlayerTurn();
+  render();
+}
+
+/* ============ HELPERS ============ */
+const S = k => state[k];
+const foe = k => k === "player" ? "ai" : "player";
+const who = k => k === "player" ? "You" : "AI";
+const poss = k => k === "player" ? "your" : "the AI's";
+// A card's face depends on where it sits: dead-hand cards may flip to their dead face,
+// and the dead dimension has "unlimited energy" — dead-hand plays are free.
+const faceOf = (cardId, fromDead) => {
+  const def = DEFS[cardId];
+  return (fromDead && def.deadFace) ? Object.assign({}, def, def.deadFace) : def;
+};
+const effCost = (cardId, fromDead) => fromDead ? 0 : DEFS[cardId].cost;
+const unitName = u => (u.dim === "dead" && DEFS[u.cardId].deadName) ? DEFS[u.cardId].deadName : DEFS[u.cardId].name;
+
+function log(msg, cls){
+  state.log.push({msg, cls: cls || (state.turn === "player" ? "p" : "a")});
+  if(state.log.length > 120) state.log.shift();
+}
+
+function draw(k, n){
+  const s = S(k);
+  for(let i = 0; i < (n||1); i++){
+    if(!s.deck.length){ log(who(k)+" has no cards left to draw.","s"); return; }
+    const c = s.deck.pop();
+    if(s.hand.length >= MAX_HAND){ log(who(k)+" burned "+DEFS[c].name+" (hand full).","s"); }
+    else s.hand.push(c);
+  }
+}
+
+function makeUnit(cardId, dim){
+  const def = DEFS[cardId], st = dim === "living" ? def.l : def.d;
+  return {uid:++uidSeq, cardId, dim, atk:st[0], hp:st[1], maxHp:st[1], exhausted:true};
+}
+
+function findUnit(uid){
+  for(const k of ["player","ai"]) for(const dim of ["living","dead"]){
+    const u = S(k)[dim].find(u => u.uid === uid);
+    if(u) return {unit:u, side:k, dim};
+  }
+  return null;
+}
+
+/* ============ CORE RULES ============ */
+function sacrifice(k, handIdx){
+  const s = S(k);
+  if(s.sacrificed || handIdx < 0 || handIdx >= s.hand.length) return false;
+  const cardId = s.hand.splice(handIdx,1)[0];
+  s.deadHand.push(cardId);
+  s.maxEss++; s.essence++;
+  s.sacrificed = true;
+  log(who(k)+" sacrificed "+DEFS[cardId].name+" → dead hand. Essence is now "+s.maxEss+".");
+  if(DEFS[cardId].ability === "martyr"){ draw(k,1); log("Martyr: "+(k === "player" ? "you" : "the AI")+" drew a card.","s"); }
+  return true;
+}
+
+function playUnit(k, handIdx, fromDead){
+  const s = S(k), hand = fromDead ? s.deadHand : s.hand;
+  const cardId = hand[handIdx], def = DEFS[cardId];
+  const dim = fromDead ? "dead" : "living";
+  const cost = effCost(cardId, fromDead);
+  if(cost > s.essence || s[dim].length >= MAX_FIELD) return false;
+  hand.splice(handIdx,1);
+  s.essence -= cost;
+  const u = makeUnit(cardId, dim);
+  if(def.ability === "haste") u.exhausted = false; // haste works in either dimension
+  s[dim].push(u);
+  log(who(k)+" played "+(dim === "dead" && def.deadName ? def.deadName : def.name)+" into the "+dim+" field.");
+  if(def.ability === "heal2"){
+    if(dim === "living"){ s.life = Math.min(START_LIFE, s.life+2); log("Village Priest restores 2 Life.","s"); }
+    else if(!s.soulBroken){ s.soul = Math.min(START_SOUL, s.soul+2); log("Heretic Shade mends 2 Soul.","s"); }
+  }
+  if(def.ability === "spirit"){ // spirit is summoned into the OTHER dimension
+    const other = dim === "living" ? "dead" : "living";
+    if(s[other].length < MAX_FIELD){
+      s[other].push(makeUnit("spirit", other));
+      log((dim === "living" ? "Wraith Caller" : "Wraith Lord")+" sends a Spirit across the veil into the "+other+" field.","s");
+    }
+  }
+  return true;
+}
+
+function castSpell(k, fromDead, handIdx, target){ // target = {uid} resolved unit ref
+  const s = S(k), hand = fromDead ? s.deadHand : s.hand;
+  const cardId = hand[handIdx], face = faceOf(cardId, fromDead);
+  if(effCost(cardId, fromDead) > s.essence) return false;
+  hand.splice(handIdx,1);
+  s.essence -= effCost(cardId, fromDead);
+  const t = target ? findUnit(target.uid) : null;
+  log(who(k)+" cast "+face.name+(t ? " on "+unitName(t.unit) : "")+".");
+  if(cardId === "smite" || cardId === "soulrend"){ if(t) t.unit.hp -= 3; }
+  else if(cardId === "cull"){
+    if(fromDead){ // Enlighten: release a dead unit for good
+      if(t){ s.dead = s.dead.filter(u => u.uid !== t.unit.uid); log(unitName(t.unit)+" is enlightened and passes on forever.","s"); }
+    } else if(t){ t.unit.hp = 0; }
+    draw(k,1);
+  }
+  else if(cardId === "resurrection"){
+    if(t){
+      s.dead = s.dead.filter(u => u.uid !== t.unit.uid);
+      const back = makeUnit(t.unit.cardId, "living");
+      s.living.push(back);
+      log(DEFS[t.unit.cardId].name+" claws back into the world of the living!","s");
+    }
+  }
+  sweepDeaths();
+  return true;
+}
+
+function validTargets(k, cardId, fromDead){
+  const face = faceOf(cardId, fromDead), me = S(k), en = S(foe(k)), out = [];
+  if(face.target === "friendlyLiving") out.push(...me.living);
+  else if(face.target === "anyLiving") out.push(...me.living, ...en.living);
+  else if(face.target === "anyDead") out.push(...me.dead, ...en.dead);
+  else if(face.target === "friendlyDeadAny") out.push(...me.dead);
+  else if(face.target === "friendlyDead"){ if(me.living.length < MAX_FIELD) out.push(...me.dead); }
+  return out;
+}
+
+function attack(attackerUid, targetUid){ // targetUid null = hero
+  const a = findUnit(attackerUid);
+  if(!a || a.unit.exhausted) return;
+  const k = a.side, enemy = S(foe(k));
+  a.unit.exhausted = true;
+  if(targetUid == null){
+    if(a.dim === "living"){ enemy.life -= a.unit.atk; log(unitName(a.unit)+" strikes "+who(foe(k))+" for "+a.unit.atk+" Life."); }
+    else if(enemy.soulBroken){ enemy.life -= a.unit.atk; log(unitName(a.unit)+" pours through the torn veil — "+a.unit.atk+" damage to "+poss(foe(k))+" Life!"); }
+    else { enemy.soul -= a.unit.atk; log(unitName(a.unit)+" drains "+a.unit.atk+" Soul from "+who(foe(k))+"."); }
+  } else {
+    const t = findUnit(targetUid);
+    if(!t || t.side !== foe(k) || t.dim !== a.dim) return;
+    t.unit.hp -= a.unit.atk; // attacker strikes first
+    if(t.unit.hp > 0){
+      a.unit.hp -= t.unit.atk;
+      log(unitName(a.unit)+" attacks "+unitName(t.unit)+" — it survives and strikes back.");
+    } else {
+      log(unitName(a.unit)+" slays "+unitName(t.unit)+" before it can retaliate.");
+    }
+  }
+  sweepDeaths();
+}
+
+function sweepDeaths(){
+  let again = true;
+  while(again){
+    again = false;
+    for(const k of ["player","ai"]){
+      const s = S(k);
+      for(const u of [...s.living]){
+        if(u.hp <= 0){ handleLivingDeath(k,u); again = true; }
+      }
+      for(const u of [...s.dead]){
+        if(u.hp <= 0){
+          s.dead = s.dead.filter(x => x.uid !== u.uid);
+          again = true; // burst effects below can cascade — re-sweep
+          const def = DEFS[u.cardId];
+          if(def.ability === "plague"){
+            log("Hollow Bearer bursts: 1 damage to all enemy dead units.","s");
+            S(foe(k)).dead.forEach(x => x.hp -= 1);
+          }
+          if(def.ability === "undying" && s.deadHand.length < MAX_HAND){
+            s.deadHand.push(u.cardId);
+            log(def.deadName+" refuses even this death and returns to "+poss(k)+" dead hand!","s");
+          } else {
+            log(unitName(u)+" is destroyed in the dead dimension. Ash and silence.","s");
+          }
+        }
+      }
+    }
+  }
+  checkWin();
+}
+
+function handleLivingDeath(k, u){
+  const s = S(k), def = DEFS[u.cardId];
+  s.living = s.living.filter(x => x.uid !== u.uid);
+  if(def.ability === "plague"){
+    log("Plague Bearer bursts: 1 damage to all enemy living units.","s");
+    S(foe(k)).living.forEach(x => x.hp -= 1);
+  }
+  if(def.ability === "undying" && s.hand.length < MAX_HAND){
+    s.hand.push(u.cardId);
+    log(def.name+" refuses death and returns to "+poss(k)+" hand!","s");
+  } else if(!def.token && s.dead.length < MAX_FIELD){
+    s.dead.push(makeUnit(u.cardId,"dead"));
+    log(def.name+" crosses over to "+poss(k)+" dead field as "+def.deadName+".","s");
+  } else {
+    log(def.name+" fades away — no room among the dead.","s");
+  }
+}
+
+function checkWin(){
+  if(state.winner) return;
+  const p = state.player, a = state.ai;
+  // Soul hitting 0 doesn't end the game — it tears the veil: the winner's dead
+  // units gain the upper hand and attack the broken player's Life directly.
+  for(const k of ["player","ai"]){
+    const s = S(k);
+    if(!s.soulBroken && s.soul <= 0){
+      s.soul = 0; s.soulBroken = true;
+      log("💀 "+(k === "player" ? "Your Soul is SHATTERED" : "The AI's Soul is SHATTERED")+"! The veil tears — "+poss(foe(k))+" dead units now strike Life directly.","s");
+    }
+  }
+  let title = null, why = null;
+  if(a.life <= 0){ title = "VICTORY"; why = a.soulBroken ? "With their Soul shattered, the dead dragged them down. Total conquest." : "You extinguished the enemy's Life."; }
+  else if(p.life <= 0){ title = "DEFEAT"; why = p.soulBroken ? "Your shattered Soul let the dead pour through. Nothing remains." : "Your Life was extinguished."; }
+  if(title){
+    state.winner = title;
+    document.getElementById("ovTitle").textContent = title;
+    document.getElementById("ovTitle").style.color = title === "VICTORY" ? "#7fd49b" : "#e07a7a";
+    document.getElementById("ovWhy").textContent = why;
+    document.getElementById("overlay").classList.add("show");
+  }
+}
+
+function startTurn(k){
+  const s = S(k);
+  s.sacrificed = false;
+  s.essence = s.maxEss;
+  s.living.forEach(u => u.exhausted = false);
+  s.dead.forEach(u => u.exhausted = false);
+  if(!(state.round === 1 && k === "player")) draw(k,1);
+}
+
+function beginPlayerTurn(){
+  state.turn = "player";
+  startTurn("player");
+  if(state.player.hand.length){
+    state.mode = {type:"sacrificePrompt"};
+    hint("Sacrifice a card (+1 Essence, it joins your dead hand) — or skip.");
+  } else {
+    state.player.sacrificed = true;
+    state.mode = null;
+  }
+}
+
+/* ============ PLAYER INPUT ============ */
+function skipSacrifice(){
+  if(state.turn !== "player" || state.winner) return;
+  if(state.mode && state.mode.type === "sacrificePrompt"){
+    state.player.sacrificed = true;
+    state.mode = null; hint("");
+    log("You forgo the sacrifice this turn.");
+    render();
+  }
+}
+
+function clickHandCard(fromDead, idx){
+  if(state.turn !== "player" || state.winner) return;
+  const s = state.player;
+  const hand = fromDead ? s.deadHand : s.hand;
+  const cardId = hand[idx], face = faceOf(cardId, fromDead);
+  const m0 = state.mode;
+  if(m0 && m0.type === "sacrificePrompt"){
+    if(fromDead){ hint("Sacrifices come from your living hand — pick one there, or skip."); return; }
+    sacrifice("player", idx);
+    state.mode = null; hint("");
+    render(); return;
+  }
+  if(m0 && m0.type === "spell" && m0.fromDead === fromDead && m0.idx === idx){
+    state.mode = null; hint(""); render(); return; // click pending spell again = cancel
+  }
+  if(effCost(cardId, fromDead) > s.essence){ hint("Not enough essence ("+face.cost+" needed)."); return; }
+  if(face.type === "unit"){
+    if(!playUnit("player", idx, fromDead)) hint("The "+(fromDead?"dead":"living")+" field is full.");
+    state.mode = null;
+  } else {
+    const targets = validTargets("player", cardId, fromDead);
+    if(!targets.length){ hint("No valid target for "+face.name+"."); return; }
+    state.mode = {type:"spell", fromDead, idx, cardId};
+    hint(face.name+": choose a target.");
+  }
+  render();
+}
+
+function clickUnit(uid){
+  if(state.turn !== "player" || state.winner) return;
+  const f = findUnit(uid);
+  if(!f) return;
+  const m = state.mode;
+  if(m && m.type === "sacrificePrompt"){ hint("Resolve the sacrifice first — pick a hand card or skip."); return; }
+  if(m && m.type === "spell"){
+    if(validTargets("player", m.cardId, m.fromDead).some(u => u.uid === uid)){
+      castSpell("player", m.fromDead, m.idx, {uid});
+      state.mode = null; hint("");
+    }
+    render(); return;
+  }
+  if(m && m.type === "attack"){
+    if(f.side === "ai" && f.dim === m.dim){ attack(m.uid, uid); state.mode = null; render(); return; }
+    if(f.side === "player"){ /* switch selection below */ } else return;
+  }
+  if(f.side === "player" && !f.unit.exhausted){
+    state.mode = {type:"attack", uid, dim:f.dim};
+    hint("Choose a target in the "+f.dim+" dimension (unit or enemy hero).");
+  } else if(f.side === "player" && f.unit.exhausted){
+    hint("That unit is exhausted.");
+  }
+  render();
+}
+
+function clickEnemyHero(dim){
+  const m = state.mode;
+  if(state.turn !== "player" || state.winner || !m || m.type !== "attack" || m.dim !== dim) return;
+  attack(m.uid, null);
+  state.mode = null; hint("");
+  render();
+}
+
+function playerEndTurn(){
+  if(state.turn !== "player" || state.winner) return;
+  if(state.mode && state.mode.type === "sacrificePrompt"){
+    state.player.sacrificed = true;
+    log("You forgo the sacrifice this turn.");
+  }
+  state.mode = null; hint("");
+  state.turn = "ai";
+  startTurn("ai");
+  render();
+  aiTurn();
+}
+
+/* ============ AI ============ */
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const lsum = id => DEFS[id].l ? DEFS[id].l[0]+DEFS[id].l[1] : 0;
+const dsum = id => DEFS[id].d ? DEFS[id].d[0]+DEFS[id].d[1] : 0;
+const usum = u => u.atk + u.hp;
+
+async function aiTurn(){
+  const s = state.ai, p = state.player;
+  await sleep(500);
+
+  // Sacrifice: prefer cards that are better off dead; spells are cheap to send over.
+  if(!s.sacrificed && s.hand.length && (s.maxEss < 7 || s.hand.length >= 6)){
+    let best = 0, bestScore = -99;
+    s.hand.forEach((id,i) => {
+      const score = DEFS[id].type === "spell" ? 0 : dsum(id) - lsum(id);
+      if(score > bestScore){ bestScore = score; best = i; }
+    });
+    sacrifice("ai", best);
+    render(); await sleep(450);
+  }
+
+  // Play phase: greedy, highest cost first, both hands; simple spell triggers.
+  let acted = true;
+  while(acted && !state.winner){
+    acted = false;
+    // units first
+    const options = [];
+    s.hand.forEach((id,i) => { if(DEFS[id].type === "unit" && DEFS[id].cost <= s.essence && s.living.length < MAX_FIELD) options.push({fromDead:false,i,cost:DEFS[id].cost}); });
+    s.deadHand.forEach((id,i) => { if(DEFS[id].type === "unit" && s.dead.length < MAX_FIELD) options.push({fromDead:true,i,cost:DEFS[id].cost}); }); // dead plays are free
+    if(options.length){
+      options.sort((a,b) => b.cost - a.cost);
+      playUnit("ai", options[0].i, options[0].fromDead);
+      acted = true; render(); await sleep(450); continue;
+    }
+    // spells
+    const trySpell = (id, pick) => {
+      for(const [fromDead, hand] of [[false,s.hand],[true,s.deadHand]]){
+        const i = hand.indexOf(id);
+        if(i < 0 || effCost(id, fromDead) > s.essence) continue;
+        const t = pick(validTargets("ai", id, fromDead), fromDead);
+        if(t){ castSpell("ai", fromDead, i, {uid:t.uid}); return true; }
+      }
+      return false;
+    };
+    if(trySpell("smite", ts => ts.filter(u => findUnit(u.uid).side === "player" && u.hp <= 3 && usum(u) >= 5).sort((a,b)=>usum(b)-usum(a))[0])
+    || trySpell("resurrection", ts => {
+         const myPow = s.living.reduce((n,u)=>n+usum(u),0), pPow = p.living.reduce((n,u)=>n+usum(u),0);
+         return (pPow > myPow) ? ts.filter(u => findUnit(u.uid).side === "ai" && lsum(u.cardId) >= 6).sort((a,b)=>lsum(b.cardId)-lsum(a.cardId))[0] : null;
+       })
+    || trySpell("cull", (ts, fromDead) => fromDead
+         ? (s.dead.length >= MAX_FIELD ? [...ts].sort((a,b)=>usum(a)-usum(b))[0] : null) // Enlighten: cycle weakest when dead field is packed
+         : ts.filter(u => dsum(u.cardId) - lsum(u.cardId) >= 3 && s.dead.length < MAX_FIELD)[0])
+    ){ acted = true; render(); await sleep(450); }
+  }
+
+  // Attack phase, both dimensions.
+  for(const dim of ["living","dead"]){
+    if(state.winner) break;
+    const heroHp = dim === "living" ? p.life : (p.soulBroken ? p.life : p.soul);
+    const ready = () => s[dim].filter(u => !u.exhausted && u.atk > 0);
+    const totalAtk = ready().reduce((n,u)=>n+u.atk,0);
+    const allFace = totalAtk >= heroHp;
+    while(ready().length && !state.winner){
+      const u = ready()[0];
+      let targetUid = null;
+      if(!allFace){
+        const foes = p[dim];
+        const freeKills = foes.filter(t => u.atk >= t.hp && t.atk < u.hp).sort((a,b)=>usum(b)-usum(a));
+        const trades = foes.filter(t => u.atk >= t.hp && usum(t) >= usum(u)).sort((a,b)=>usum(b)-usum(a));
+        if(freeKills.length) targetUid = freeKills[0].uid;
+        else if(trades.length) targetUid = trades[0].uid;
+      }
+      attack(u.uid, targetUid);
+      render(); await sleep(420);
+    }
+  }
+
+  if(state.winner){ render(); return; }
+  state.round++;
+  log("— Round "+state.round+" — your turn.","s");
+  beginPlayerTurn();
+  render();
+}
+
+/* ============ RENDER ============ */
+function hint(msg){
+  const h = document.getElementById("hint");
+  h.textContent = msg;
+  h.classList.toggle("show", !!msg);
+  if(msg) setTimeout(() => { if(h.textContent === msg) h.classList.remove("show"); }, 2600);
+}
+
+function unitEl(u, side){
+  const def = DEFS[u.cardId], el = document.createElement("div");
+  el.className = "unit";
+  if(u.hp < u.maxHp) el.classList.add("hurt");
+  const m = state.mode;
+  if(side === "player"){
+    if(u.exhausted) el.classList.add("exhausted");
+    else if(state.turn === "player") el.classList.add("ready");
+    if(m && m.type === "attack" && m.uid === u.uid) el.classList.add("selected");
+  }
+  if(m && state.turn === "player"){
+    if(m.type === "spell" && validTargets("player", m.cardId, m.fromDead).some(x => x.uid === u.uid)) el.classList.add("targetable");
+    if(m.type === "attack" && side === "ai" && u.dim === m.dim) el.classList.add("targetable");
+  }
+  el.innerHTML = `<div class="uname">${unitName(u)}</div><div class="uart">${artFor(u.cardId, u.dim === "dead")}</div>
+    <div class="ability">${def.ability ? def.text.split(":")[0] : ""}</div>
+    <div class="stats"><span class="atk">${u.atk}</span><span class="hp">${u.hp}</span></div>`;
+  el.onclick = () => clickUnit(u.uid);
+  return el;
+}
+
+function cardEl(cardId, idx, fromDead){
+  const def = DEFS[cardId], face = faceOf(cardId, fromDead), el = document.createElement("div");
+  el.className = "card";
+  const s = state.player, m = state.mode;
+  const cost = effCost(cardId, fromDead);
+  const affordable = cost <= s.essence && state.turn === "player";
+  if(m && m.type === "sacrificePrompt" && !fromDead) el.classList.add("sacmode");
+  else if(m && m.type === "spell" && m.fromDead === fromDead && m.idx === idx) el.classList.add("pendingcast");
+  else if(affordable && !(m && m.type === "sacrificePrompt")) el.classList.add("playable");
+  else el.classList.add("unplayable");
+  const dispName = (def.type === "unit" && fromDead && def.deadName) ? def.deadName : face.name;
+  const stats = def.type === "unit"
+    ? `<div class="cstats"><span class="liv">⚔${def.l[0]}/${def.l[1]} living</span><span class="ded">☠${def.d[0]}/${def.d[1]} dead</span></div>`
+    : `<div class="spelltag">✦ spell</div>`;
+  el.innerHTML = `<div class="cost">${cost}</div><div class="cname">${dispName}</div>
+    <div class="cart">${artFor(cardId, fromDead)}</div>
+    <div class="ctext">${face.text}</div>${stats}`;
+  el.onclick = () => clickHandCard(fromDead, idx);
+  return el;
+}
+
+function heroChipEl(id, label, val, icon, dim){
+  const el = document.getElementById(id);
+  el.innerHTML = `<span class="name">${label}</span><span class="hp">${icon} ${val}</span>`;
+  const m = state.mode;
+  const targetable = m && m.type === "attack" && m.dim === dim && state.turn === "player";
+  el.classList.toggle("targetable", !!targetable);
+  el.onclick = () => clickEnemyHero(dim);
+}
+
+function render(){
+  const p = state.player, a = state.ai;
+  document.getElementById("turnInfo").textContent = "Round "+state.round+" — "+(state.turn === "player" ? "your turn" : "AI is thinking…");
+  document.getElementById("aiInfo").textContent = `AI: ${a.life}♥ ${a.soulBroken ? "SHATTERED" : a.soul+"☠"} · hand ${a.hand.length} · dead hand ${a.deadHand.length} · deck ${a.deck.length}`;
+
+  heroChipEl("aiLifeChip","Enemy Life", a.life, "♥", "living");
+  heroChipEl("aiSoulChip", a.soulBroken ? "Soul SHATTERED — hits Life!" : "Enemy Soul", a.soulBroken ? a.life : a.soul, a.soulBroken ? "💔" : "☠", "dead");
+
+  const rows = {aiLiving:[a.living,"ai"], pLiving:[p.living,"player"], aiDead:[a.dead,"ai"], pDead:[p.dead,"player"]};
+  for(const [rid,[units,side]] of Object.entries(rows)){
+    const row = document.getElementById(rid);
+    row.innerHTML = "";
+    units.forEach(u => row.appendChild(unitEl(u, side)));
+  }
+
+  const ph = document.getElementById("pHand"); ph.innerHTML = "";
+  p.hand.forEach((c,i) => ph.appendChild(cardEl(c,i,false)));
+  const pdh = document.getElementById("pDeadHand"); pdh.innerHTML = "";
+  p.deadHand.forEach((c,i) => pdh.appendChild(cardEl(c,i,true)));
+
+  document.getElementById("essDisp").textContent = p.essence+" / "+p.maxEss;
+  document.getElementById("pLifeDisp").textContent = "♥ "+p.life;
+  document.getElementById("pSoulDisp").textContent = p.soulBroken ? "💔 SHATTERED" : "☠ "+p.soul;
+  document.getElementById("pDeckDisp").textContent = p.deck.length+" cards";
+  const sacBtn = document.getElementById("sacBtn");
+  const prompting = !!(state.mode && state.mode.type === "sacrificePrompt");
+  sacBtn.disabled = !prompting || state.turn !== "player" || !!state.winner;
+  sacBtn.textContent = prompting ? "Skip sacrifice" : (p.sacrificed ? "Sacrifice resolved" : "Sacrifice at turn start");
+  sacBtn.classList.toggle("armed", prompting);
+  document.getElementById("endBtn").disabled = state.turn !== "player" || !!state.winner;
+
+  const lb = document.getElementById("logbox");
+  lb.innerHTML = state.log.slice(-60).map(e => `<div class="l-${e.cls}">${e.msg}</div>`).join("");
+  lb.scrollTop = lb.scrollHeight;
+}
+
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape" && state && state.mode && state.mode.type !== "sacrificePrompt"){
+    state.mode = null; hint(""); render();
+  }
+});
+
+newGame();
+</script>
+</body>
+</html>

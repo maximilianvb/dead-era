@@ -1,0 +1,15 @@
+{
+  "name": "dead-era",
+  "version": "0.4.0",
+  "private": true,
+  "description": "A two-dimension card game prototype — every card lives twice.",
+  "scripts": {
+    "test": "node tests/rules.test.js",
+    "test:ui": "node tests/ui.test.js",
+    "serve": "python -m http.server 8123",
+    "art": "node tools/generate-art.mjs"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.3.0"
+  }
+}

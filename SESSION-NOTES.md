@@ -1,37 +1,82 @@
-# Session Notes — 2026-07-08 · handoff
+# Session Notes — 2026-07-08 (late) · Balance pass: health, hand size, unit sacrifice, dead-hand cooldown
 
-## Running right now (unattended)
+## Rules changes (user design)
+- **Health up across the board**: `START_LIFE` 25→30, `START_SOUL` 15→20 (js/cards.js) — the dead-side war has room to breathe (DESIGN.md's own tuning note suggested 18–20 Soul).
+- **Opening hand is 7** (was 5) for both sides; mulligan unchanged.
+- **Sacrifice reaches the board**: the turn-start prompt now accepts a hand card OR one of your units (`sacrificeUnit()` in js/game.js). Living-face units cross to the dead hand; dead faces/tokens burn to nothing. Martyr and Brann's passive fire either way. Units pulse red during the prompt; the LLM AI gets `sacrifice_unit` actions.
+- **Dead-hand cooldown**: every card that ENTERS a dead hand is "fresh" and unplayable until the start of its owner's next turn (`s.deadFresh` counter + `toDeadHand()` funnel — sacrifice, deaths, twin/echo/digger/ferry/gamble/steal/Beckon all route through it; `startTurn` settles everything). UI grays fresh cards with an "⏳ settling" badge; scripted + LLM AI skip locked indices. This kills the sacrifice-then-instantly-redeploy tempo line. (User first wanted dead hands purged at veil-break, then reversed: keep the dead hand, add the cooldown instead.)
+- **One-dimension-only cards removed** (design law: every card works in both dimensions): **Whispered Claim** (vb_claim — both faces possess enemy DEAD units only; the `possess` fx machinery went with it) and **Resurrection** (single dead-only face used from both hands). Decklist slot: resurrection→mend; balance-sim control deck subs vb_flay/vb_hush. `loadMeta()` now strips removed ids from saved decks/collections (short decks fall back to default).
 
-- **Veilbound art generation** (200 images, ~15–20 min on the 4070) is rendering in **staged mode**: images land in `I:\dead-era-ai\art-staging`, and are published to `art/` + `art/manifest.js` **in one burst at the very end**, so a live-server session isn't disturbed mid-run. Requires ComfyUI to stay up (`tools/start-comfyui.ps1` if it was closed).
-- **Check tomorrow:** `art/` should hold ~286 PNGs including `vb_*` files. If not, just re-run: `node tools/generate-art.mjs --no-llm --staged` — it only renders what's missing.
-- Live-server tip: add `art/**` to `liveServer.settings.ignoreFiles` to avoid even the one reload burst at publish time.
+## Art
+- The **Rat token** was the last card with no painted art (SVG fallback) — rendered `rat_living/rat_dead` via the staged ComfyUI pipeline (started ComfyUI portable from I:\dead-era-ai, rendered, shut it back down). Manifest: 370 images. Added a `rat` subject to tools/generate-art.mjs.
 
-## What landed at the end of this session (engine side, all tested ✅)
+## Tests: all green
+- `npm test` → **290 rule tests** (new: opening-hand-7, unit sacrifice incl. tokens/enemy/Brann/Martyr, cooldown lock/settle, settled-vs-fresh indexing) + 60-game fuzz clean.
+- `npm run test:ui` → **30/30** (mulligan shows 7; fresh dead-hand card verified locked in-browser).
+- `node tools/balance-sim.js` runs clean post-changes.
 
-- **Death is never an auto-play anymore**: units, omen units, and destroyed situations all go to their owner's **dead hand**; the dead board is built only by paying dead energy. (Undying still bounces to the living hand; dead-side deaths still final.)
-- **Generic situation engine**: every situation face carries `sitFx {kind, n, charges?}` — all legacy situations migrated. Kinds: `livingAtk deadAtk foeDeadAtk turnDraw turnLife turnSoul turnEss turnDeadEss turnDrain ward enterDeadHp onLivingDeathLife onDeadDestroyDrain doom`.
-- **Generic spell engine**: `face.fx {kind,...}` in `runSpellFx()` — `dmg buff drainSoul drainLife healLife healSoul cauterize draw(payLife/paySoul) gainEss gainDeadEss aoe shift gamble possess dispel` + the `echo` flag (living cast copies itself to the dead hand).
-- **New unit mechanics**: `twin` (reflection to dead hand on living play), `harvest:N` (kills drain Soul), `consume` (eats weakest friendly dead unit on dead play), `blood:N` Bloodprice (pay Life living / Soul dead — can shatter yourself; cost:0), doom knells & charge counters on situations.
-- **`js/sets/veilbound.js`** — the 100-card set (58 units / 26 spells / 16 situations), every card with `art:{l,d}` prompts. **NOT yet loaded by the game** (deliberate — see below).
-- `npm test` currently: **112 rule tests + fuzz, all green** (set not loaded yet, so untested).
+---
 
-## Remaining to do (priority order)
+# Session Notes — 2026-07-08 (evening) · Hex & Relic, THE TEAR, unit powers
 
-1. **Load the set**: add `<script src="js/sets/veilbound.js"></script>` to `index.html` between `js/game.js` and `js/meta.js`. Collection migration then auto-grants 1 copy of each new card and packs start dropping them.
-2. **Bloodprice for situations**: `playSituation()` in `js/game.js` doesn't yet handle `def.blood` (needed by `vb_fountain`). Mirror the `canPayBlood`/`payBlood` logic from `playUnit`.
-3. **UI polish for new mechanics**:
-   - Blood-cost gem on cards (red gem showing `def.blood`; affordable = living: `life > blood`, dead: always) in `cardEl` + preview (`js/ui.js`), plus a `.cost.blood` style.
-   - Doom/charge counters on situation plates (`sitPlate()`): show `🔔 sit.n/fx.n` for doom, `sit.c left` for charges.
-4. **AI support**: scripted AI has no heuristics for generic-fx spells or blood units yet — it will simply never cast/play them.
-   - Add a `tryFx()` fallback in `scriptedPlayOnce` switching on `face.fx.kind` (dmg→like smite, buff→own biggest, drain→like soultap, heal→if missing, draw→if hand small & can pay, aoe→if enemy loses more, shift→if other face is ≥3 stats better, gamble→if deck nonempty, possess→enemy dead usum≥5, dispel→any target).
-   - Blood-unit gates in `scriptedPlayOnce` options and LLM `addPlays` (`canPayBlood` instead of pool check; AI shouldn't blood-pay below ~life 8).
-5. **Tests**: add (a) a **card-integrity mass test** — every DEFS entry has valid type/cost/rarity, units have l+d, spell fx kinds ∈ implemented set, situation sitFx kinds ∈ implemented set, omen deadFaces have sitFx; (b) mechanic tests for twin/harvest/consume/blood/echo/shift/gamble/possess/doom/charges; (c) fuzz with a Veilbound-heavy deck. Then `npm test` + `npm run test:ui`.
-6. **Balance pass** on Veilbound numbers after a few games; consider adding some `vb_` cards to the default `DECKLIST`.
-7. **Docs**: DESIGN.md section for Veilbound + the new mechanic glossary; README card-count updates.
+Huge rules/content session on top of the morning's champion/mulligan/animation work.
 
-## Where things live
+## THE TEAR — veil-break completely reworked (user design)
+Soul 0 now **collapses both battlefields into ONE field** (`state.merged`, `tearVeil()` in js/game.js):
+- Loser forfeits everything in the dead: dead field, dead situations, dead hand — devoured.
+- Winner's dead legion marches onto the one field **keeping dead faces** (`u.deadFace`), dead situations follow (dead face stays active), dead hand stays playable (post-merge dead plays land on the one field as dead faces, paid with dead energy).
+- One field cap = `MERGED_FIELD_CAP` (10). Veilshift/Veilstep flip faces in place post-merge. UI hides the dead half; living section becomes "THE ONE FIELD".
 
-- Rules engine: `js/game.js` (DOM-free) · cards: `js/cards.js` + `js/sets/veilbound.js` · UI: `js/ui.js` · meta/packs/builder: `js/meta.js`
-- Tests: `npm test` (rules+fuzz), `npm run test:ui` (headless-Edge, needs `npm install` once)
-- Art pipeline: `tools/generate-art.mjs` (`--no-llm` fast, `--staged` no-interruption, `--only <id>`, `--force`) · ComfyUI at `I:\dead-era-ai`
-- Debug boards: `index.html#demo`, `#packs`, `#builder`
+## Set: Hex & Relic (js/sets/hexrelic.js, 34 cards)
+Interaction set on a new **unit-status engine** (`u.st` + board badges): Freeze ❄, Blight 🦠, Reaper's Mark 💀, Hollow 🚫, Shackle ⛓, granted Guard/Ranged/Lifesteal/Twin Strike. Envelope-pushers: Inversion Hex (ATK↔HP), Mirror of Bone (clone any unit), Soul Exchange (ownership swap), The Leveller (all units 3/3), Grave Robbery (steal from dead hand), Second Sunrise (mass-ready; AI has a post-attack pass to use it), Winterveil (mass freeze), Croaking Curse (polymorph → Toad token). Counterplay seam: anything that re-makes a unit (shift/polymorph/bounce) washes statuses off.
+
+## Unit powers (user request)
+Units with `power:{}` charge ⚡1 per owner turn in play and unleash a spell of their own (`useUnitPower`): Hedge Pyromancer, Bone Chanter, Veil Oracle, Storm Idol, Banner Saint. Click the glowing ⚡ bar on the unit. Frozen/Hollowed units can't channel. Scripted + LLM AI both use them.
+
+## Other user requests shipped
+- **Situations**: max 5 per dimension (was 2); plates now lie faded *behind* the units (full-row layer, hover to read).
+- **Random decks**: `randomDeck()` deals a curved 40 (22 units 10/8/4, 12 spells, 6 sits, max 2 copies, blood≈cost). The AI brings a fresh one EVERY game (`META.aiDeck` hook for sims/tests). Main menu "Random Deck Match"; builder "Random Deck" button (ownership-aware).
+- **AI pacing slowed**: plays ~1050ms, attacks ~950ms between actions (was 320–650) so turns are readable.
+- Default deck got a taste of hexes: hx_frost + hx_fangs swapped in.
+
+## Balance (tools/balance-sim.js — now loads hexrelic, uses META.aiDeck; decks: default/blood/control/hex/random)
+- Post-merge meta: games ~9.5 rounds, first-move ≈ even. Hex deck 40–45% vs default (fair-ish), random-vs-default ~40–50%.
+- Consistent outliers fixed: Corvus Foresight 5→6 (was 65–73%), Maelis Transfuse now grants 3 essence (was 35–38%).
+- Fixed a real AI hang found by fuzz: shackled units caused an infinite attack loop (scriptedAttacks now targets units or gives up).
+
+## Tests: all green
+- `npm test` → **274 rule tests** (statuses, all new fx kinds, unit powers, merge semantics, randomDeck distribution, MAX_SITS 5) + 60-game fuzz (now mulligans, uses hero AND unit powers, checks merged invariants).
+- `npm run test:ui` → **29/29** (adds Random Deck Match flow).
+- `#demo` board now seeds frozen/blighted/doomed/shackled units, granted badges and a charged Firebolt for visual work.
+
+## Art
+70 new images (34 Hex & Relic cards + Toad token, both faces) generated via ComfyUI staged pipeline → art/ (~370 total in manifest).
+
+## Ideas for next session
+- LLM-vs-scripted overnight matches (still deferred).
+- More combo lint: an "archetype sim" pass (freeze-tempo deck, status-voltron deck) once played by better heuristics.
+- Post-merge UX: maybe a dramatic one-time field-merge animation (rows sliding together).
+- Fresh collection: `localStorage.removeItem("deadera-meta")`.
+
+# Session Notes — 2026-07-08 (night) · MULTIPLAYER: play a friend with a link
+
+Ran in parallel with the balance session above — engine untouched, everything is additive.
+
+## What shipped
+- **Link-invite multiplayer, deployed**: https://dead-era-production.up.railway.app — menu → "⚔ Play a Friend (link)" → Create Game Link → friend opens `?room=CODE` link → hero select → mulligan → play. No accounts; **random decks only** (both sides get `randomDeck()`); creator goes first.
+- **Architecture** (server-authoritative, zero engine changes):
+  - `server/server.js` — static hosting + `ws` rooms (5-char codes, 2 seats, rejoin tokens, 30-min GC, ~500 room cap). Builds the engine per room by concatenating cards.js + game.js + sets + `server/mp.js` into a factory (`new Function`), same trick as tests/rules.test.js. Log strings are source-patched so `who()`/`poss()` speak player names instead of You/AI.
+  - `server/mp.js` — 2-player orchestration on the side-parametric engine: `mpNewGame` (delegates to `newGame()` with `META.playerDeck = randomDeck`, so balance changes to hand size etc. flow through), per-seat hero select + mulligan, sacrifice prompt per turn (incl. new `sacrificeUnit`), validated actions (turn/target/legality server-side), `mpViewFor(seat)` per-viewer redaction (opponent hand/deadHand/decks → nulls) + perspective swap (viewer is always `state.player`, winner/log classes mirrored).
+  - `js/net.js` — client: lobby overlay, WS, and in MP mode window-overrides the ~12 mutating engine functions (`sacrifice`, `playCard`, `castSpell`, `attack`, …) to send actions instead; renders whatever state arrives. FX events (draw/crossOver/damage/playedCard/shatter/attack) are captured server-side and replayed through the existing FX queues, so animations survive — opponent attacks animate on the old board before the new state lands.
+  - Rejoin: token in sessionStorage; refresh mid-game lands back in your seat. Opponent online/offline banners. Rematch via Play Again (both must click).
+- **Railway**: project `dead-era` (service d4b9e7ee, env production), `railway up` from the repo, domain generated. In-memory rooms, no DB.
+
+## Tests
+- `npm run test:mp` — 38 protocol assertions (create/join/full-room/redaction/perspective/turn legality/rejoin).
+- `node tests/mp-ui.test.js` — 20 checks: two headless-Edge pages play each other through the real UI (link create/join, hero select, mulligan, sacrifice, turn cycle, refresh-rejoin, zero JS errors). Note: puppeteer mouse-clicks hang on CDP scrollIntoView for the fullscreen overlays over http — the test dispatches DOM clicks instead.
+- Existing `npm test` failures tonight are the balance session's WIP (tests lag the 30/20 health change), not multiplayer.
+
+## Known limits / next
+- Spectators, >2 players, turn timers: not built. Room list: none (link-only by design).
+- `state.mode` targeting UI is client-local; server only knows the sacrifice prompt.
+- If game.js log strings around who/poss change shape, server logs a warning and falls back to You/AI texts (games unaffected).

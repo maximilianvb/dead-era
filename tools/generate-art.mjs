@@ -49,6 +49,8 @@ const SUBJECTS = {
                 d:"a skeletal peasant clawing up out of grave soil, broken pitchfork beside it, wisps of soul-light"},
   gravrat:     {l:"a large grey rat with one red eye crouched on a mossy gravestone",
                 d:"an undead skeletal rat with exposed spine and glowing red eye"},
+  rat:         {l:"a small scruffy brown rat scurrying over wet cobblestones, beady black eyes, torchlight",
+                d:"a small rotting undead rat with patchy fur and exposed ribs, faint sickly green glow"},
   hound:       {l:"a fierce war hound mid-leap, charging with bared teeth",
                 d:"a translucent spectral barrow hound with glowing blue eyes, trailing ghost-mist"},
   shambler:    {l:"a half-buried human skeleton stirring in forest earth, one bony arm reaching out of the grave",
@@ -75,8 +77,6 @@ const SUBJECTS = {
                 d:"a human soul ascending in a column of serene golden light from a dark battlefield"},
   smite:       {l:"a massive forked golden lightning bolt striking down from black storm clouds",
                 d:"three glowing violet spectral claw slashes rending through darkness"},
-  resurrection:{l:"a radiant figure rising from an open grave, golden light rays bursting upward, awe",
-                d:"a radiant figure rising from an open grave, golden light rays bursting upward, seen from the ghostly other side"},
   tome:        {l:"an ancient open tome on a lectern, golden runes glowing above its pages",
                 d:"a black grimoire bound in cracked dark leather, purple runes glowing, wisps seeping from its pages"},
   grove:       {l:"a serene sacred grove, one great sunlit ancient tree with golden leaves",
@@ -135,6 +135,16 @@ const SUBJECTS = {
                 d:"portrait of a scythe-wielding wraith made of violet mist, pale blue eyes, crown of smoke"},
   h_brann:     {l:"portrait of a weathered old king wearing a crown of embers, ash dusted in his beard",
                 d:"portrait of an ash-white king with cracked skin glowing from within with embers, hollow orange eyes"},
+  h_sylvara:   {l:"portrait of an elven wanderer half-lit in green and half in violet, one foot through a shimmering veil",
+                d:"portrait of the same wanderer fully spectral, split by a glowing red tear in reality, calm eyes"},
+  h_corvus:    {l:"portrait of a sly card-reader in a feathered cloak fanning tarot cards, a raven on his shoulder",
+                d:"portrait of a skeletal cartomancer whose floating cards glow violet, raven now made of smoke"},
+  h_maelis:    {l:"portrait of a pale noblewoman in crimson lace, a drop of blood at her lips, imperious",
+                d:"portrait of the noblewoman as an exsanguinated ghost, white as chalk, red eyes, floating veil"},
+  h_oswin:     {l:"portrait of an old bell-keeper with a great bronze bell, rope-scarred hands, mournful gaze",
+                d:"portrait of a hollow-eyed spectral bell-keeper fused with his cracked bell, violet resonance rings"},
+  toad:        {l:"a fat warty toad wearing the tiny dented remains of a knight's helmet, sitting in mud",
+                d:"a small translucent ghost toad glowing pale blue, croaking a ring of mist"},
 };
 
 async function ollamaEnrich(base, deadFace){
@@ -195,7 +205,7 @@ function loadSetSubjects(){
   for(const f of fs.readdirSync(setsDir).filter(x => x.endsWith(".js"))){
     try {
       const src = fs.readFileSync(path.join(setsDir, f), "utf8").replace(/"use strict";/, "");
-      const setObj = new Function("DEFS", src + "\n;return typeof VEILBOUND !== 'undefined' ? VEILBOUND : {};")({});
+      const setObj = new Function("DEFS", src + "\n;return typeof VEILBOUND !== 'undefined' ? VEILBOUND : (typeof HEXRELIC !== 'undefined' ? HEXRELIC : {});")({});
       let n = 0;
       for(const [id, def] of Object.entries(setObj)){
         if(def.art && def.art.l){ SUBJECTS[id] = {l: def.art.l, d: def.art.d || def.art.l}; n++; }

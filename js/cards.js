@@ -19,6 +19,7 @@ const DEFS = {
   deathknight:{rarity:"legendary", name:"Death Knight",     deadName:"Dread Revenant",  cost:5, type:"unit", l:[4,5], d:[5,5], text:"Terrible in any world."},
   spirit:     {name:"Spirit",           deadName:"Spirit",          cost:0, type:"unit", l:[2,2], d:[2,2], token:true, text:"Token."},
   rat:        {name:"Rat",              deadName:"Rotting Rat",     cost:0, type:"unit", l:[1,1], d:[1,1], token:true, text:"Token."},
+  toad:       {name:"Toad",             deadName:"Ghost Toad",      cost:0, type:"unit", l:[1,1], d:[1,1], token:true, text:"Croak."},
 
   /* --- Expansion: Tolls of the Veil --- */
   gravedigger:{rarity:"common", name:"Gravedigger",     deadName:"Barrow Digger",   cost:2, type:"unit", l:[2,2], d:[2,1], ability:"digger", text:"On play: put the top card of your deck into your dead hand."},
@@ -80,7 +81,6 @@ const DEFS = {
                deadFace:{name:"Enlighten", target:"friendlyDeadAny", text:"Release a friendly dead unit — it passes on forever. Draw a card."}},
   smite:      {rarity:"rare", name:"Smite",            cost:2, type:"spell", target:"anyLiving",      text:"Deal 3 damage to any living unit.",
                deadFace:{name:"Soul Rend", target:"anyDead", text:"Deal 3 damage to any dead unit."}},
-  resurrection:{rarity:"epic", name:"Resurrection",    cost:3, type:"spell", target:"friendlyDead",   text:"Return a friendly dead unit to your living field. Works from either hand."},
 
   /* Situations: persistent passives over one dimension (Shadow Era-style support cards). */
   tome:       {rarity:"legendary", name:"Tome of Knowledge", deadName:"Tome of the Damned", cost:3, type:"situation",
@@ -96,23 +96,75 @@ const DECKLIST = [];
 ["shambler","priest","flameblade","plague","warden","wraithcaller","ghoul","deathknight","candlemaid","drummer"]
   .forEach(id => DECKLIST.push(id,id));
 DECKLIST.push("hound","collector");
-DECKLIST.push("cull","cull","smite","smite","soultap","soultap","dispel","dispel","darkpact","darkpact","resurrection","requiem");
+DECKLIST.push("cull","cull","smite","smite","soultap","hx_frost","dispel","dispel","darkpact","hx_fangs","mend","requiem");
 DECKLIST.push("tome","tome","grove","grove","warbanner","font");
 
-const MAX_FIELD = 6, MAX_HAND = 10, MAX_SITS = 2, START_LIFE = 25, START_SOUL = 15, ESS_CAP = 10;
+/* A well-distributed random deck: real curve, real type mix, max 2 copies.
+   Used for the AI's fresh deck every game and the player's Random Deck mode. */
+function randomDeck(pool, maxCopiesOf){
+  const all = (pool || Object.keys(DEFS)).filter(id => DEFS[id] && !DEFS[id].token);
+  const maxOf = maxCopiesOf || (() => 2);
+  const costOf = id => DEFS[id].blood != null ? Math.min(DEFS[id].blood, 6) : DEFS[id].cost;
+  const buckets = [ // 40 cards: 22 units on a curve, 12 spells, 6 situations
+    {n:10, ok: id => DEFS[id].type === "unit" && costOf(id) <= 2},
+    {n:8,  ok: id => DEFS[id].type === "unit" && costOf(id) >= 3 && costOf(id) <= 4},
+    {n:4,  ok: id => DEFS[id].type === "unit" && costOf(id) >= 5},
+    {n:7,  ok: id => DEFS[id].type === "spell" && costOf(id) <= 2},
+    {n:5,  ok: id => DEFS[id].type === "spell" && costOf(id) >= 3},
+    {n:6,  ok: id => DEFS[id].type === "situation"},
+  ];
+  const deck = [], count = {};
+  const take = id => { count[id] = (count[id]||0) + 1; deck.push(id); };
+  for(const b of buckets){
+    const cand = all.filter(b.ok);
+    for(let i = 0, guard = 0; i < b.n && guard < 400 && cand.length; guard++){
+      const id = cand[Math.floor(Math.random()*cand.length)];
+      if((count[id]||0) >= maxOf(id)) continue;
+      take(id); i++;
+    }
+  }
+  for(let guard = 0; deck.length < 40 && guard < 400; guard++){ // fill any shortfall
+    const id = all[Math.floor(Math.random()*all.length)];
+    if((count[id]||0) >= maxOf(id)) continue;
+    take(id);
+  }
+  return deck.slice(0, 40);
+}
+
+const MAX_FIELD = 6, MAX_HAND = 10, MAX_SITS = 5, START_LIFE = 30, START_SOUL = 20, ESS_CAP = 10;
+const MERGED_FIELD_CAP = 10; // after the veil tears, the one field holds more
 
 /* ============ CHAMPIONS ============
-   Chosen before the game; each has a passive. Every hero has a living
-   portrait and a dead face (shown in the Dead Dimension plaque). */
+   Chosen before the game. Each has a passive AND a channeled power:
+   every turn the hero channels 1 Energy (⚡); banking it and spending it on
+   the power is a core playstyle decision. Every hero has a living portrait
+   and a dead face (shown in the Dead Dimension plaque). */
+const CHANNEL_CAP = 9;
 const HEROES = {
   alder:  {name:"Ser Alder",  title:"the Lifewarden",
-           passive:"At the start of your turn, restore 1 Life."},
+           passive:"At the start of your turn, restore 1 Life.",
+           power:{name:"Dawn's Aegis", cost:3, text:"Restore 3 Life — any excess light mends your Soul instead."}},
   morwen: {name:"Morwen",     title:"the Grave Queen",
-           passive:"Your units enter the dead field with +1 HP."},
+           passive:"Your units enter the dead field with +1 HP.",
+           power:{name:"Beckon the Grave", cost:3, text:"Put the top card of your deck into your dead hand and gain 1 dead energy."}},
   vex:    {name:"Vex",        title:"the Soul Reaper",
-           passive:"Your dead units strike the enemy Soul for +1 damage."},
+           passive:"Your dead units strike the enemy Soul for +1 damage.",
+           power:{name:"Reap", cost:3, text:"Drain 3 Soul from the enemy (Life if their Soul is shattered)."}},
   brann:  {name:"Brann",      title:"the Ashen King",
-           passive:"Your sacrifice also burns 1 enemy Soul (Life once shattered)."},
+           passive:"Your sacrifice also burns 1 enemy Soul (Life once shattered).",
+           power:{name:"Cinderstorm", cost:6, text:"Deal 1 damage to every ENEMY unit in both dimensions."}},
+  sylvara:{name:"Sylvara",    title:"the Veilwalker",
+           passive:"At the start of your turn, gain 1 dead energy.",
+           power:{name:"Veilstep", cost:3, targeted:true, text:"Move one of your units across the veil — it takes its other face."}},
+  corvus: {name:"Corvus",     title:"the Cartomancer",
+           passive:"Whenever you forgo the sacrifice, channel +1 Energy.",
+           power:{name:"Foresight", cost:6, text:"Draw 2 cards."}},
+  maelis: {name:"Maelis",     title:"the Bloodbound",
+           passive:"Your Bloodprices cost 1 less (minimum 1).",
+           power:{name:"Transfuse", cost:3, text:"Pay 2 Life: gain 3 Essence this turn."}},
+  oswin:  {name:"Oswin",      title:"the Tollkeeper",
+           passive:"Enemy units enter the dead field with 1 less HP (minimum 1).",
+           power:{name:"Final Toll", cost:3, text:"The bell claims 1 HP from every unit in the dead dimension — both sides."}},
 };
 
 /* A card's face depends on where it sits. Living plays spend Essence;
@@ -122,4 +174,4 @@ const faceOf = (cardId, fromDead) => {
   return (fromDead && def.deadFace) ? Object.assign({}, def, def.deadFace) : def;
 };
 const effCost = (cardId, fromDead) => DEFS[cardId].cost;
-const unitName = u => (u.dim === "dead" && DEFS[u.cardId].deadName) ? DEFS[u.cardId].deadName : DEFS[u.cardId].name;
+const unitName = u => ((u.dim === "dead" || u.deadFace) && DEFS[u.cardId].deadName) ? DEFS[u.cardId].deadName : DEFS[u.cardId].name;

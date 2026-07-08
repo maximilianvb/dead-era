@@ -4,10 +4,15 @@
   "private": true,
   "description": "A two-dimension card game prototype — every card lives twice.",
   "scripts": {
+    "start": "node server/server.js",
     "test": "node tests/rules.test.js",
     "test:ui": "node tests/ui.test.js",
+    "test:mp": "node tests/mp.test.js",
     "serve": "python -m http.server 8123",
     "art": "node tools/generate-art.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "puppeteer-core": "^25.3.0"

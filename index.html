@@ -62,6 +62,7 @@
         <div class="orbcell"><div class="orb orb-dead"><b id="deadEssDisp">0</b></div><div class="orbsub"><span id="deadEssMax">crossed over</span> dead energy</div></div>
       </div>
       <div class="ctlrow"><span>deck <b id="pDeckDisp">25</b></span></div>
+      <button id="powerBtn" onclick="uiHeroPower()" title="">Hero Power</button>
       <button id="sacBtn" onclick="uiSkipSacrifice()">Skip Sacrifice</button>
       <button class="endturn" id="endBtn" onclick="uiEndTurn()">End Turn</button>
     </div>
@@ -80,6 +81,7 @@
 <div id="hint"></div>
 <div id="preview"></div>
 <div id="heroSelect"></div>
+<div id="mulligan"></div>
 <div id="metaScreen"></div>
 <div id="mainMenu">
   <div class="mm-title">DEAD ERA</div>
@@ -87,6 +89,8 @@
   <div class="mm-buttons">
     <button class="mm-btn" id="mmContinue" onclick="menuContinue()">Continue Game</button>
     <button class="mm-btn mm-primary" onclick="menuPlay()">Play vs AI</button>
+    <button class="mm-btn" onclick="mpShowLobby()">⚔ Play a Friend (link)</button>
+    <button class="mm-btn" onclick="menuPlayRandom()">Random Deck Match</button>
     <button class="mm-btn" onclick="menuCollection()">Collection &amp; Deck</button>
     <button class="mm-btn" onclick="menuPacks()">Open Packs</button>
     <button class="mm-btn mm-minor" id="mmAiBtn" onclick="toggleAiMode()">AI: Scripted</button>
@@ -103,7 +107,10 @@
 <script src="js/cards.js"></script>
 <script src="js/art.js"></script>
 <script src="js/game.js"></script>
+<script src="js/sets/veilbound.js"></script>
+<script src="js/sets/hexrelic.js"></script>
 <script src="js/meta.js"></script>
 <script src="js/ui.js"></script>
+<script src="js/net.js"></script>
 </body>
 </html>

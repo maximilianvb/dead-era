@@ -26,6 +26,13 @@ function loadMeta(){
   }
   // migration: new expansion cards appear in old collections (1 free copy each)
   COLLECTIBLE.forEach(id => { m.cards[id] = m.cards[id] || {n:1, f:0}; });
+  // migration: cards removed from the game vanish from saved decks; a deck
+  // that comes up short falls back to the default decklist
+  if(m.deck){
+    m.deck = m.deck.filter(id => DEFS[id]);
+    if(m.deck.length !== DECK_SIZE) m.deck = null;
+  }
+  Object.keys(m.cards).forEach(id => { if(!DEFS[id]) delete m.cards[id]; });
   return m;
 }
 function saveMeta(){
@@ -33,7 +40,9 @@ function saveMeta(){
 }
 
 /* ---------- engine hooks ---------- */
-META.playerDeck = () => (meta.deck && meta.deck.length === DECK_SIZE) ? meta.deck : null;
+META.playerDeck = () => window.randomMatch
+  ? randomDeck()
+  : ((meta.deck && meta.deck.length === DECK_SIZE) ? meta.deck : null);
 META.onVictory = () => {
   meta.wins++; meta.packs++;
   saveMeta();
@@ -129,6 +138,7 @@ function renderBuilder(){
        <span class="ms-sub">click a card to add it · hover for details · ✕ removes a copy · max ${MAX_COPIES} copies</span>
        <span class="spacer"></span>
        <button onclick="toggleBuilderFilter()">Showing: ${builderFilter === "addable" ? "addable" : "all cards"}</button>
+       <button onclick="randomizeDraftDeck()">Random Deck</button>
        <button onclick="resetDraftDeck()">Default Deck</button>
        <button onclick="closeMetaScreen()">Back</button></div>
      <div class="builder">
@@ -177,6 +187,11 @@ function toggleFoil(id){
   saveMeta(); renderBuilder();
 }
 function resetDraftDeck(){ draftDeck = [...DECKLIST]; renderBuilder(); }
+function randomizeDraftDeck(){ // well-distributed random deck from cards you actually own
+  const ownedPool = COLLECTIBLE.filter(id => meta.cards[id] && (meta.cards[id].n + meta.cards[id].f) > 0);
+  draftDeck = randomDeck(ownedPool, id => Math.min(MAX_COPIES, meta.cards[id].n + meta.cards[id].f));
+  renderBuilder();
+}
 function saveDraftDeck(){
   if(draftDeck.length !== DECK_SIZE) return;
   meta.deck = [...draftDeck];

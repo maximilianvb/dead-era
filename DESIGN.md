@@ -17,13 +17,13 @@ A two-dimension card game. Every card lives twice: once in the **Living Dimensio
 
 ### Setup
 
-- Each player: **25 Life** (Living) and **15 Soul** (Dead), a 30-card deck, opening hand of 5.
+- Each player: **30 Life** (Living) and **20 Soul** (Dead), a 40-card deck, opening hand of 7.
 - Only **Life 0 ends the game**. Soul is the upper-hand track (see The Veil below).
 
 ### Resources — Essence (living side only)
 
 - You start at 0 max Essence; it refills at the start of your turn. Max Essence caps at **10**.
-- **Turn-start sacrifice prompt** (Shadow Era style): after your draw, you're prompted to sacrifice one card from hand — +1 max Essence, +1 now, card moves to your dead hand — or skip. It's part of the turn flow, not an action you activate.
+- **Turn-start sacrifice prompt** (Shadow Era style): after your draw, you're prompted to sacrifice one card from hand **or one of your units on the board** — +1 max Essence, +1 now — or skip. A hand card or living-face unit crosses to your dead hand; dead-face units and tokens burn to nothing. It's part of the turn flow, not an action you activate.
 - **Dead Energy flows from the living.** Every point of Essence you spend on living plays crosses the veil and becomes Dead Energy the same turn (spend 3 on a living unit → 3 Dead Energy for dead-hand plays). It resets to 0 each turn, so sequencing matters: spend living first, then deploy the dead. There is no sacrificing on the dead side.
 
 ### Zones per player
@@ -31,14 +31,14 @@ A two-dimension card game. Every card lives twice: once in the **Living Dimensio
 | Zone         | What it holds                                                                                           |
 | ------------ | ------------------------------------------------------------------------------------------------------- |
 | Hand         | Drawn cards; play into the Living field at Essence cost                                                 |
-| Dead hand    | Sacrificed cards; free to play — units enter the Dead field as dead counterparts, spells use dead faces |
+| Dead hand    | Sacrificed and fallen cards — units deploy to the Dead field as dead counterparts, spells use dead faces. **New arrivals are fresh: they settle for one turn and can't be played until the start of your next turn.** |
 | Living field | Units, living stats (max 6)                                                                             |
 | Dead field   | Dead counterparts, dead stats (max 6)                                                                   |
 
 ### Turn
 
 1. Refill Essence, draw 1.
-2. **Sacrifice prompt**: pick a card (or skip). Once per turn.
+2. **Sacrifice prompt**: pick a hand card or one of your units (or skip). Once per turn.
 3. Main phase: play from either hand, attack with ready units in both dimensions, any order.
 4. End turn.
 
@@ -127,18 +127,71 @@ Gameplay was unit-heavy; this set shifts the texture. Default decks grow to **40
 | Essence Font | Font of Rot | 2 | Situation: +1 Essence / +1 dead energy at turn start |
 | Thorn Ward | Wailing Ward | 2 | Situation: units attacking your hero in that dimension take 1 |
 
-## Champions (v0.3)
+## Expansion III: Veilbound (v0.6) — 102 cards, novel mechanics
 
-Chosen before each game (the AI picks randomly). Each has a passive and two portraits — living, and the dead face shown on the Dead Dimension plaque.
+Authored in [js/sets/veilbound.js](js/sets/veilbound.js) (each card carries its own art prompts). 59 units / 27 spells / 16 situations. New mechanics, all engine-generic:
 
-| Champion                  | Passive                                                    |
-| ------------------------- | ---------------------------------------------------------- |
-| Ser Alder, the Lifewarden | At the start of your turn, restore 1 Life.                 |
-| Morwen, the Grave Queen   | Your units enter the dead field with +1 HP.                |
-| Vex, the Soul Reaper      | Your dead units strike the enemy Soul for +1 damage.       |
-| Brann, the Ashen King     | Your sacrifice also burns 1 enemy Soul (Life once shattered). |
+- **Twin** — on living play, its reflection falls into your dead hand.
+- **Harvest N** — kills drain N Soul (Life once shattered).
+- **Consume** — on dead play, eats your weakest dead unit and gains its ATK.
+- **Bloodprice N** — costs N Life (living) or N Soul (dead) instead of energy. Paying Soul past 0 shatters *your own* veil — greed has a price. Never allows outright suicide on the living side.
+- **Echo** — cast from the living hand, a copy slips into your dead hand.
+- **Veilshift** — move your unit through the veil, swapping to its other face.
+- **Gamble** — reveal the top card: units storm in free, anything else falls to the dead hand.
+- **Possess** — steal an enemy dead unit; the dead answer whoever calls loudest.
+- **Doom (knells)** — The Tolling counts up each turn, then annihilates its entire dimension.
+- **Charges** — strong situations that burn out after N turns.
+- **Ranged** (rare attribute, 2 cards) — takes no retaliation when attacking units.
 
-Balance note from simulation: hero passives (Vex/Brann especially) accelerate the soul race — souls shattered in 30/30 sim games. If the veil tears too reliably, raise `START_SOUL`.
+Spells/situations use the generic `fx` / `sitFx` engine (see js/game.js `runSpellFx` and the sitFx hooks) — new cards are data, not code. Veilbound cards aren't in the default deck; they arrive via packs plus one free copy each (collection migration).
+
+**Balance pass (2026-07-08, `tools/balance-sim.js` self-play):** a Bloodprice-stuffed deck won 90% of games vs the default, ending in 5.6 rounds — free-tempo bodies broke the essence curve. Tuned: Blood Thrall 3/2→2/2, Blood-Sworn Knight blood 4→5 & 4/3→3/3, Bloodline Matriarch blood 5→7 & 5/4→4/4, Vharu blood 6→8 & 6/5→5/5, Blood Fountain blood 2→3 & heals 2→1. Now ~65% (an honest aggro matchup vs an untuned deck). Whispered Claim (Possess, 5) showed no dominance in the control-deck sim and keeps its cost. First-mover advantage measured ≈ even.
+
+## THE TEAR (v0.6): the dimensions merge
+
+Soul 0 no longer just "tears the veil" — it **collapses the two battlefields into ONE**:
+
+- The **loser** (whose soul shattered) forfeits *everything in the dead*: dead-field units, dead situations, and their whole dead hand — devoured by the tear.
+- The **winner** keeps it all: their dead units march onto the one field **still wearing their dead faces** (`u.deadFace`), their dead situations follow (dead face stays active — a merged Tome of the Damned keeps buffing the legion via `atkOf`'s deadFace branch), and their dead hand remains playable: post-merge, dead-hand cards deploy onto the one field as their dead faces, still paid with dead energy.
+- The one field holds up to `MERGED_FIELD_CAP` (10) units per side; only Life damage matters from here. Veilshift/Veilstep flip a unit's face *in place* post-merge. A second shatter just burns that player's dead hand.
+
+## Set: Hex & Relic (v0.6) — 34 cards of pure interaction
+
+**Unit statuses** (`u.st`, badges on the board): ❄ Frozen (won't wake N turns) · 🦠 Blight (perma-DoT at owner's turn start) · 💀 Reaper's Mark (dies in N turns) · 🚫 Hollowed (all abilities/gifts silenced) · ⛓ Shackled (can't strike heroes) · granted 🛡 Guard / 🏹 Ranged / 🩸 Lifesteal / ⚔² Twin Strike.
+
+- **Hexes**: Grasp of Frost, Creeping Blight, Croaking Curse (→ 1/1 Toad), Hollowing, Leaden Shackles, Mark of the Reaper, Whispered Betrayal (unit hits its own weakest ally), Winterveil (mass freeze), Banishing Gale (bounce).
+- **Relics/charms**: Vampire Fangs (lifesteal heals Life living-side, Soul dead-side), Spectral Longbow, Gravewrought Plate (+2 HP & Guard), Horn of Twin Blows, Quicksilver Charm (ready + Echo), Giant's Blood.
+- **Envelope-pushers**: Inversion Hex (swap ATK/HP — works on YOUR 1/5s), Mirror of Bone (clone ANY unit, even theirs), Soul Exchange (trade your weakest for their unit), The Leveller (every unit becomes 3/3), Grave Robbery (steal from their dead hand), Second Sunrise (ready your whole line — cast AFTER attacking).
+- **Powered units** (⚡ charge 1/turn in play, click the glowing bar): Hedge Pyromancer (Firebolt), Bone Chanter (soul drain), Veil Oracle (Scry), Storm Idol (Tempest, all enemies), Banner Saint (Rally). Hollowing silences them; Freeze stalls them.
+- **Hex units** (on-play debuffs, auto-target strongest enemy in their dimension): Gutter Witch (−2 ATK), Frost Wight (freeze), Veil Jailer (shackle); Crimson Countess has innate Lifesteal.
+- **Situations**: Miasma of Despair (enemy living −1 ATK), Field of Nettles (turn-start sting), The Gallows (perma-ATK-drain, 4 charges), Blood/Bone Forge (units enter with +1 ATK). Situation slots are now **5 per dimension**, drawn as faded plates lying *behind* the units.
+
+**Combo seams (intentional):** Inversion Hex on your own high-HP walls; Frost + Reaper's Mark (they can't even trade before it lands); statuses are cleansed by re-making the unit — Veilshift, Croaking Curse and bounce all "wash" hexes, which is the counterplay; Twin Strike + Vampire Fangs; Second Sunrise after an alpha strike; Grave Robbery vs Bloodprice decks (their dead hand is their engine).
+
+## Random decks (v0.6)
+
+`randomDeck()` (js/cards.js) deals a well-distributed 40: 22 units on a 10/8/4 curve, 12 spells (7 cheap/5 big), 6 situations, max 2 copies (Bloodprice counts as its blood cost). **The AI brings a fresh one to every game** (`META.aiDeck` overrides for sims). Player: main-menu **Random Deck Match** or the builder's Random Deck button (ownership-aware).
+
+## Champions (v0.5): passives + channeled powers
+
+Chosen before each game (the AI picks randomly). Each has a passive, two portraits (living + the dead face on the Dead Dimension plaque), **and a channeled power**: every turn the hero banks **⚡1 Channel** (cap 9), and the power spends it. Channel banks across turns, so you choose between using the power on cooldown or saving up for a double-cast turn. Powers are used via the ⚡ button in the controls (Veilstep targets a unit); the scripted AI has per-hero heuristics and the LLM opponent gets powers as enumerated legal actions.
+
+| Champion                   | Passive                                                     | Power (⚡cost)                                                       |
+| -------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------- |
+| Ser Alder, the Lifewarden  | At the start of your turn, restore 1 Life.                  | **Dawn's Aegis (3)** — restore 3 Life; excess mends Soul.            |
+| Morwen, the Grave Queen    | Your units enter the dead field with +1 HP.                 | **Beckon the Grave (3)** — mill top card to dead hand, +1 dead energy. |
+| Vex, the Soul Reaper       | Your dead units strike the enemy Soul for +1 damage.        | **Reap (3)** — drain 3 Soul (Life if shattered).                     |
+| Brann, the Ashen King      | Your sacrifice also burns 1 enemy Soul (Life once shattered). | **Cinderstorm (6)** — 1 damage to every ENEMY unit, both dimensions. |
+| Sylvara, the Veilwalker    | At the start of your turn, gain 1 dead energy.              | **Veilstep (3)** — move one of your units across the veil.           |
+| Corvus, the Cartomancer    | Whenever you forgo the sacrifice, channel +1 Energy.        | **Foresight (5)** — draw 2 cards.                                    |
+| Maelis, the Bloodbound     | Your Bloodprices cost 1 less (minimum 1).                   | **Transfuse (3)** — pay 2 Life: gain 2 Essence this turn.            |
+| Oswin, the Tollkeeper      | Enemy units enter the dead field with 1 less HP (min 1).    | **Final Toll (3)** — 1 damage to every dead unit, both sides.        |
+
+Balance (self-play sim, `node tools/balance-sim.js`): all eight sit in a 42–62% win band on mirror decks. Earlier tunings recorded there: Brann's Cinderstorm 5→6, Corvus's passive changed from draw-a-card to channel-charge, Vex's Reap 2→3 damage, Oswin's Toll 4→3, Maelis's Transfuse 2→3.
+
+## Mulligan (v0.5)
+
+After choosing a champion you see your 5 opening cards and may exchange any of them once (replacements drawn first, tossed cards shuffled back). The AI ships everything costing 5+.
 
 ## Meta-game (v0.3): collection, packs, rarity, foils
 
@@ -152,7 +205,7 @@ Balance note from simulation: hero passives (Vex/Brann especially) accelerate th
 Greedy heuristics, no search:
 
 - **Sacrifice**: prefers the card whose dead stats most exceed its living stats — sacrificing is deployment.
-- **Play**: units greedily by cost (dead hand is free, so it floods when it can); Smite/Soul Rend on big cheap-to-kill threats, Resurrection when behind on the living board, Cull on units worth ≥3 more dead, Enlighten to cycle when its dead field is packed.
+- **Play**: units greedily by cost (dead plays flood when dead energy allows); Smite/Soul Rend on big cheap-to-kill threats, Cull on units worth ≥3 more dead, Enlighten to cycle when its dead field is packed.
 - **Attack**: free kills first (attacker-strikes-first makes these safe), even trades against bigger threats, otherwise face. Goes all-face on lethal — counting the torn veil.
 
 ## LLM opponent (v0.3)
@@ -176,8 +229,8 @@ The whole presentation is DOM/CSS: attack lunges, damage floats, cross-over ghos
 
 ## Tuning knobs to playtest first
 
-- Soul 15: shatters often — is the veil too easy to tear? Try 18–20.
-- Free dead plays are a big tempo engine; if sacrifice-flooding dominates, try dead plays costing cost−2 (min 0) instead.
+- ~~Soul 15: shatters often — is the veil too easy to tear? Try 18–20.~~ Done: Soul is now 20 (Life 30) — the dead-side war has room to breathe.
+- Sacrifice-then-immediately-redeploy was too strong a tempo engine — dead-hand arrivals now settle for one turn before they can be played.
 - Undying on the dead side is a free replayable 1/1 — make dead-side Undying once per game if it turns out degenerate.
 
 ## Roadmap
